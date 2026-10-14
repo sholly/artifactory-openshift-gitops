@@ -35,6 +35,25 @@ global:
 splitServicesToContainers: true
 
 # -------------------------------------------------------------------------
+# jfconnect, evidence and onemodel do not exist in artifactory-oss. The
+# chart already skips those containers when the image repository matches
+# *oss|jcr|cpp-ce, but `artifactory.router.requiredServiceTypes` ignores
+# that check, so the router keeps waiting for services that were never
+# started and never passes its readiness probe:
+#   [jfrou] [WARN] Missing required services: [jfcon jfevd jfomr]
+# Disabling them here drops jfcon/jfevd/jfomr from the router's required
+# list. Remove this block when switching to artifactory-pro.
+# -------------------------------------------------------------------------
+jfconnect:
+  enabled: false
+
+evidence:
+  enabled: false
+
+onemodel:
+  enabled: false
+
+# -------------------------------------------------------------------------
 # ServiceAccount is created by the `artifactory-platform` Application
 # together with the SCC RoleBinding, so it must NOT be created by the chart.
 #
