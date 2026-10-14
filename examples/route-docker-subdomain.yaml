@@ -1,0 +1,53 @@
+# ===========================================================================
+# EXAMPLE: Docker registry access.
+#
+# Two ways to expose Docker repositories, both documented by JFrog:
+#
+# 1. Repository path method - NOTHING extra to deploy. Works through the
+#    existing Route:
+#       docker login artifactory.apps.example.com
+#       docker pull artifactory.apps.example.com/artifactory/api/docker/<repo>/<image>
+#    Set "Repository Path" as the Docker Access Method on the reverse proxy
+#    page in Artifactory. Simplest option on OpenShift.
+#
+# 2. Subdomain method - each Docker repository gets its own hostname
+#    (<repo>.artifactory.apps.example.com), which is what plain
+#    `docker pull <repo>.host/<image>` expects.
+#    This needs a wildcard Route, which in turn needs the OpenShift router to
+#    allow wildcards (disabled by default):
+#
+#      oc -n openshift-ingress-operator patch ingresscontroller/default \
+#        --type=merge -p '{"spec":{"routeAdmission":{"wildcardPolicy":"WildcardsAllowed"}}}'
+#
+#    and a wildcard TLS certificate for *.artifactory.apps.example.com.
+# ===========================================================================
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: artifactory-docker-wildcard
+  namespace: artifactory
+  labels:
+    app.kubernetes.io/name: artifactory
+    app.kubernetes.io/part-of: artifactory
+  annotations:
+    haproxy.router.openshift.io/timeout: 600s
+spec:
+  # Must be an explicit host; Subdomain policy then also serves *.<host>.
+  host: docker.artifactory.apps.example.com
+  wildcardPolicy: Subdomain
+  to:
+    kind: Service
+    name: artifactory
+    weight: 100
+  port:
+    targetPort: http-router
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+    # Supply the wildcard certificate here, or let the router use its default
+    # wildcard cert if it already covers this domain.
+    # key: |
+    #   -----BEGIN PRIVATE KEY-----
+    # certificate: |
+    #   -----BEGIN CERTIFICATE-----

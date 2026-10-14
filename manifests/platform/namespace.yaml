@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: artifactory
+  labels:
+    name: artifactory
+    app.kubernetes.io/part-of: artifactory
+    # Allow the OpenShift monitoring stack to discover ServiceMonitors here
+    # (only relevant if you later enable artifactory.metrics.enabled).
+    openshift.io/cluster-monitoring: "false"
+  annotations:
+    openshift.io/display-name: "JFrog Artifactory"
+    argocd.argoproj.io/sync-wave: "-10"

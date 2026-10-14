@@ -1,0 +1,49 @@
+# ===========================================================================
+# EXAMPLE: only needed if you run a CUSTOM Argo CD instance.
+#
+# The default `openshift-gitops` instance installed by the OpenShift GitOps
+# operator already runs its application controller with cluster-admin, so it
+# can create the SecurityContextConstraints in manifests/platform/scc.yaml.
+#
+# A self-managed Argo CD instance usually cannot. Without this you will see:
+#   "securitycontextconstraints.security.openshift.io is forbidden:
+#    User system:serviceaccount:<ns>:<argocd>-argocd-application-controller
+#    cannot create resource ..."
+#
+# Adjust the ServiceAccount namespace/name to your instance, then apply.
+# ===========================================================================
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-manage-scc
+rules:
+  - apiGroups:
+      - security.openshift.io
+    resources:
+      - securitycontextconstraints
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-manage-scc
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-manage-scc
+subjects:
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops
+  # The server SA needs read access for the UI to show the resource.
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-server
+    namespace: openshift-gitops

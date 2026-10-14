@@ -1,0 +1,35 @@
+---
+# ---------------------------------------------------------------------------
+# "App of apps": the only Application you apply by hand. It renders every
+# Application under gitops/applications/ from git, so from here on all
+# changes are made by committing to this repository.
+# ---------------------------------------------------------------------------
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: artifactory-bootstrap
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: artifactory
+  annotations:
+    argocd.argoproj.io/sync-wave: "-19"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: artifactory
+  source:
+    repoURL: https://github.com/CHANGE-ME/artifactory-openshift-gitops.git
+    targetRevision: main
+    path: gitops/applications
+    directory:
+      recurse: false
+      include: "*.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-gitops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

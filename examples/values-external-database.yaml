@@ -1,0 +1,40 @@
+# ===========================================================================
+# EXAMPLE: use an external / managed PostgreSQL instead of the bundled one.
+# Recommended for production: database lifecycle, backups and HA stop being
+# the Helm release's problem.
+#
+# Add as an extra valueFile in gitops/applications/artifactory.yaml, after
+# $values/helm/values-openshift.yaml:
+#
+#   valueFiles:
+#     - sizing/artifactory-small.yaml
+#     - $values/helm/values-openshift.yaml
+#     - $values/examples/values-external-database.yaml
+#
+# Create the credentials secret first (keys are referenced below):
+#   oc -n artifactory create secret generic artifactory-database \
+#     --from-literal=db-url='jdbc:postgresql://pg.example.com:5432/artifactory' \
+#     --from-literal=db-user='artifactory' \
+#     --from-literal=db-password='...'
+# ===========================================================================
+
+postgresql:
+  enabled: false
+
+database:
+  type: postgresql
+  driver: org.postgresql.Driver
+  secrets:
+    url:
+      name: artifactory-database
+      key: db-url
+    user:
+      name: artifactory-database
+      key: db-user
+    password:
+      name: artifactory-database
+      key: db-password
+
+# Artifactory blocks startup until the database answers. Keep this on unless
+# the database is guaranteed to be up before the pod starts.
+waitForDatabase: true

@@ -1,0 +1,75 @@
+---
+# ---------------------------------------------------------------------------
+# Wave 0: the JFrog Artifactory Helm release.
+#
+# Two sources (Argo CD multi-source, OpenShift GitOps >= 1.9):
+#   1. the upstream chart, pinned by version
+#   2. this git repo, referenced as `$values`, which supplies the values file
+#
+# valueFiles are merged in order, last wins:
+#   sizing/artifactory-xsmall.yaml   <- shipped INSIDE the chart (CPU/memory)
+#   $values/helm/values-openshift.yaml  <- this repo (OpenShift specifics)
+#
+# Sizing profiles available in the chart: artifactory-xsmall, -small,
+# -medium, -large, -xlarge, -2xlarge. Change the first entry to resize.
+#
+# PREREQUISITE: the secrets referenced by the values file must exist in the
+# `artifactory` namespace before the first sync - see scripts/create-secrets.sh.
+# ---------------------------------------------------------------------------
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: artifactory
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: artifactory
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: artifactory
+  sources:
+    - repoURL: https://charts.jfrog.io
+      chart: artifactory
+      targetRevision: 107.161.26
+      helm:
+        # Keep this name: the chart derives resource names from it, including
+        # the `artifactory-postgresql` secret the containers read.
+        releaseName: artifactory
+        valueFiles:
+          - sizing/artifactory-xsmall.yaml
+          - $values/helm/values-openshift.yaml
+    - repoURL: https://github.com/CHANGE-ME/artifactory-openshift-gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: artifactory
+  syncPolicy:
+    automated:
+      prune: true
+      # selfHeal keeps the release honest. Note that Artifactory writes its
+      # own config into the database/PVC, not into these manifests, so this
+      # does not fight the application itself.
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      # Honour the ignoreDifferences below during sync, not just during diff.
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m
+  ignoreDifferences:
+    # The StatefulSet's volumeClaimTemplates are immutable after creation;
+    # a storage-class or size change there would make Argo CD loop forever
+    # trying (and failing) to patch it. Resize the PVCs instead.
+    - group: apps
+      kind: StatefulSet
+      name: artifactory
+      jsonPointers:
+        - /spec/volumeClaimTemplates

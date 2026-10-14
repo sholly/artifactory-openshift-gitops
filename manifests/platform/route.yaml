@@ -1,0 +1,41 @@
+---
+# ---------------------------------------------------------------------------
+# External access to the JFrog Platform UI / REST API / repositories.
+# ---------------------------------------------------------------------------
+# The chart's bundled NGINX is disabled (nginx.enabled=false in
+# helm/values-openshift.yaml) - the OpenShift router replaces it. Traffic goes
+# straight to the JFrog Router container on port 8082 (service port
+# `http-router`), which fronts every microservice (/ui, /artifactory,
+# /access, /xray, ...).
+#
+# `host` is intentionally omitted so OpenShift generates
+#   artifactory-artifactory.apps.<cluster-domain>
+# Set it explicitly (and matching TLS material) for a production hostname -
+# the Artifactory "Custom Base URL" should match whatever you use here.
+# ---------------------------------------------------------------------------
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: artifactory
+  namespace: artifactory
+  labels:
+    app.kubernetes.io/name: artifactory
+    app.kubernetes.io/part-of: artifactory
+  annotations:
+    argocd.argoproj.io/sync-wave: "-7"
+    # Large artifact uploads/downloads easily outlive the router's 30s default.
+    haproxy.router.openshift.io/timeout: 600s
+    # Streaming uploads: don't let the router buffer whole artifacts.
+    haproxy.router.openshift.io/disable_cookies: "true"
+spec:
+  # host: artifactory.apps.example.com
+  to:
+    kind: Service
+    name: artifactory
+    weight: 100
+  port:
+    targetPort: http-router
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

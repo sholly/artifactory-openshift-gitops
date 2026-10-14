@@ -1,0 +1,45 @@
+---
+# ---------------------------------------------------------------------------
+# AppProject that scopes everything this repo is allowed to touch.
+# Applied once by hand (oc apply -k gitops/bootstrap), then self-managed.
+# ---------------------------------------------------------------------------
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: artifactory
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: artifactory
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  description: JFrog Artifactory on OpenShift
+
+  sourceRepos:
+    # This repository (manifests + Helm values).
+    - https://github.com/CHANGE-ME/artifactory-openshift-gitops.git
+    # Upstream JFrog Helm chart repository.
+    - https://charts.jfrog.io
+
+  destinations:
+    - namespace: artifactory
+      server: https://kubernetes.default.svc
+    # The root Application manages the child Applications, which live here.
+    - namespace: openshift-gitops
+      server: https://kubernetes.default.svc
+
+  # Cluster-scoped resources this project may manage - nothing else.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: security.openshift.io
+      kind: SecurityContextConstraints
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  # Hand-created secrets and StatefulSet PVCs live in this namespace without
+  # being tracked by Argo CD; warning about them would be pure noise.
+  orphanedResources:
+    warn: false

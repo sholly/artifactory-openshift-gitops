@@ -1,0 +1,203 @@
+# ===========================================================================
+# JFrog Artifactory - OpenShift values
+# ---------------------------------------------------------------------------
+# Chart   : jfrog/artifactory 107.161.26  (Artifactory 7.161.26)
+# Applied : AFTER the upstream sizing profile referenced by the Argo CD
+#           Application (sizing/artifactory-xsmall.yaml), so everything here
+#           wins over the sizing defaults.
+#
+# Only OpenShift-specific and environment-specific settings belong in this
+# file. CPU/memory tuning comes from the chart's own sizing/*.yaml profiles -
+# switch profile in gitops/applications/artifactory.yaml.
+# ===========================================================================
+
+global:
+  # -----------------------------------------------------------------------
+  # Bundled PostgreSQL is a Bitnami-derived chart. `force` strips
+  # runAsUser/runAsGroup/fsGroup from its pod specs so the pod is admitted by
+  # the standard `restricted-v2` SCC with an OpenShift-assigned UID.
+  # (The Artifactory pod itself keeps its fixed UID and uses artifactory-scc.)
+  # -----------------------------------------------------------------------
+  compatibility:
+    openshift:
+      adaptSecurityContext: force
+
+  # -----------------------------------------------------------------------
+  # Cluster keys. MUST be supplied out-of-band and MUST NOT change after the
+  # first start - the master key encrypts everything in the database.
+  # Create them before the first sync: see scripts/create-secrets.sh.
+  # Secret `artifactory-cluster-keys` holds keys `master-key` and `join-key`.
+  # -----------------------------------------------------------------------
+  masterKeySecretName: artifactory-cluster-keys
+  joinKeySecretName: artifactory-cluster-keys
+
+# One container per microservice (chart default, required for 7.x).
+splitServicesToContainers: true
+
+# -------------------------------------------------------------------------
+# ServiceAccount is created by the `artifactory-platform` Application
+# together with the SCC RoleBinding, so it must NOT be created by the chart.
+#
+# IMPORTANT: this only covers the Artifactory StatefulSet. With
+# splitServicesToContainers the chart also creates standalone Deployments
+# (frontend, jfbus, jfmelt, ...) which default to the namespace's `default`
+# ServiceAccount and run as their own fixed UIDs. Each one is pinned to the
+# same ServiceAccount below so that a single SCC binding covers everything -
+# otherwise those pods are rejected by admission.
+# -------------------------------------------------------------------------
+serviceAccount:
+  create: false
+  name: artifactory
+
+frontend:
+  serviceAccountName: artifactory
+
+jfbus:
+  serviceAccountName: artifactory
+
+jfmelt:
+  serviceAccountName: artifactory
+
+# Optional add-on services, disabled by default. Enable them here AND keep
+# the ServiceAccount pinned, or they will fail admission:
+# rtfs:
+#   serviceAccountName: artifactory
+# apptrust:
+#   serviceAccountName: artifactory
+# unifiedpolicy:
+#   serviceAccountName: artifactory
+# evaluation:
+#   serviceAccountName: artifactory
+# platformfederation:
+#   serviceAccountName: artifactory
+
+# -------------------------------------------------------------------------
+# No bundled NGINX and no Ingress: the OpenShift Router terminates TLS and
+# proxies to the JFrog Router (service port `http-router`, 8082).
+# The Route lives in manifests/platform/route.yaml.
+# -------------------------------------------------------------------------
+nginx:
+  enabled: false
+
+ingress:
+  enabled: false
+
+# Container-level hardening applied to every container in the pod.
+# Compatible with restricted-v2 except for the pod-level UID below.
+containerSecurityContext:
+  enabled: true
+  runAsNonRoot: true
+  privileged: false
+  allowPrivilegeEscalation: false
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop:
+      - ALL
+
+artifactory:
+  # jfrog/artifactory-pro requires a license (see examples/ for how to feed
+  # one in). For the free edition use:
+  #   repository: jfrog/artifactory-oss
+  image:
+    registry: releases-docker.jfrog.io
+    repository: jfrog/artifactory-pro
+    # Pin a digest for immutable deploys:
+    # digest: sha256:...
+
+  # >1 requires an Enterprise license and ReadWriteMany/object storage.
+  replicaCount: 1
+
+  # Single secret for all chart-managed secrets (chart default).
+  unifiedSecretInstallation: true
+
+  # -----------------------------------------------------------------------
+  # Fixed JFrog UID/GID. Admitted by `artifactory-scc`
+  # (manifests/platform/scc.yaml), NOT by restricted-v2.
+  # fsGroup makes the RWO PersistentVolume group-writable for the pod.
+  # -----------------------------------------------------------------------
+  podSecurityContext:
+    enabled: true
+    runAsNonRoot: true
+    runAsUser: 1030
+    runAsGroup: 1030
+    fsGroup: 1030
+    # Uncomment on slow/large volumes to skip recursive chown on every start:
+    # fsGroupChangePolicy: "OnRootMismatch"
+
+  persistence:
+    enabled: true
+    # Filestore. Switch to s3-storage-v3-direct / azure-blob-storage-v2-direct
+    # for production object storage - see examples/values-objectstore-s3.yaml.
+    type: file-system
+    size: 100Gi
+    accessMode: ReadWriteOnce
+    # Leave empty to use the cluster default StorageClass.
+    # storageClassName: ocs-storagecluster-ceph-rbd
+
+  service:
+    type: ClusterIP
+
+  # -----------------------------------------------------------------------
+  # Optional: bootstrap admin password.
+  # Secret data key must contain the full line: admin@127.0.0.1=<password>
+  # Create it first (scripts/create-secrets.sh --with-admin), then uncomment.
+  # -----------------------------------------------------------------------
+  # admin:
+  #   secret: artifactory-admin-creds
+  #   dataKey: bootstrap.creds
+
+  # -----------------------------------------------------------------------
+  # Optional: license key, mounted as artifactory.lic.
+  # Create the secret first, then uncomment:
+  #   oc -n artifactory create secret generic artifactory-license \
+  #     --from-file=artifactory.lic=./artifactory.lic
+  # -----------------------------------------------------------------------
+  # license:
+  #   secret: artifactory-license
+  #   dataKey: artifactory.lic
+
+# -------------------------------------------------------------------------
+# Bundled PostgreSQL.
+# Credentials come from the pre-created secret `artifactory-postgresql`.
+# This is REQUIRED under GitOps: with no existingSecret the subchart generates
+# a random password on every `helm template`, so every Argo CD sync would
+# rewrite the secret while the database kept the original password.
+#
+# The secret name is also what the Artifactory containers read
+# (<release>-postgresql / key `password`), so keep it as `artifactory-postgresql`
+# unless you also change the release name.
+#
+# For production, prefer an external/managed PostgreSQL:
+# see examples/values-external-database.yaml.
+# -------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  auth:
+    username: artifactory
+    database: artifactory
+    existingSecret: artifactory-postgresql
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+      # storageClassName: ocs-storagecluster-ceph-rbd
+    extendedConfiguration: |
+      listen_addresses = '*'
+      max_connections = 300
+    # The sizing profiles ask for 8-16Gi of PostgreSQL memory. That is right
+    # for a loaded production instance; this is a sane non-prod default.
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        memory: 4Gi
+
+# Send service logs to stdout so `oc logs` / cluster logging see them,
+# instead of only to files on the PVC.
+logging:
+  logToStdoutJson: false

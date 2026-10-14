@@ -1,0 +1,40 @@
+---
+# ---------------------------------------------------------------------------
+# Wave -1: namespace, ServiceAccount, SCC + RoleBinding, Route, NetworkPolicy.
+# These must exist before the Helm release is applied, otherwise the
+# Artifactory pod is refused by admission (no SCC allows UID 1030).
+# ---------------------------------------------------------------------------
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: artifactory-platform
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: artifactory
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: artifactory
+  source:
+    repoURL: https://github.com/CHANGE-ME/artifactory-openshift-gitops.git
+    targetRevision: main
+    path: manifests/platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: artifactory
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # The Namespace is a managed resource in this Application.
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

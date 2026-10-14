@@ -1,0 +1,79 @@
+---
+# ---------------------------------------------------------------------------
+# SecurityContextConstraints for Artifactory
+# ---------------------------------------------------------------------------
+# The JFrog images are built around fixed, non-root UIDs/GIDs (artifactory
+# runs as 1030:1030) and the chart sets them in the pod securityContext.
+# OpenShift's default `restricted-v2` SCC only permits UIDs from the
+# namespace's pre-allocated range (typically 1000000000+), so the pod would be
+# rejected with:
+#   "unable to validate against any security context constraint:
+#    ... runAsUser: Invalid value: 1030"
+#
+# This SCC is a clone of `restricted-v2` that permits the JFrog UID/GID range
+# (1030-1140) and nothing else: no privileged containers, no host namespaces,
+# no host paths, all capabilities dropped, seccomp RuntimeDefault.
+#
+# The range has to cover every JFrog service, not just Artifactory itself -
+# with splitServicesToContainers the chart also creates separate Deployments:
+#   1030 artifactory   1031 frontend   1038 rtfs    1120 apptrust
+#   1125 ...           1127 jfbus      1128 jfmelt  1129/1132 (other addons)
+# All of them are pinned to the `artifactory` ServiceAccount in
+# helm/values-openshift.yaml so this one binding covers them.
+#
+# It has no `users`/`groups` and no `priority`, so it is never selected
+# automatically - it is granted explicitly through the Role/RoleBinding in
+# rbac.yaml. That keeps every other workload in the cluster unaffected.
+# ---------------------------------------------------------------------------
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: artifactory-scc
+  labels:
+    app.kubernetes.io/part-of: artifactory
+  annotations:
+    kubernetes.io/description: >-
+      Clone of restricted-v2 that allows the fixed JFrog Artifactory
+      UIDs/GIDs (1030-1140). Granted only to the artifactory ServiceAccount.
+    argocd.argoproj.io/sync-wave: "-9"
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: false
+allowPrivilegedContainer: false
+allowedCapabilities: null
+defaultAddCapabilities: null
+requiredDropCapabilities:
+  - ALL
+readOnlyRootFilesystem: false
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 1030
+  uidRangeMax: 1140
+seLinuxContext:
+  type: MustRunAs
+fsGroup:
+  type: MustRunAs
+  ranges:
+    - min: 1030
+      max: 1140
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+    - min: 1030
+      max: 1140
+seccompProfiles:
+  - runtime/default
+volumes:
+  - configMap
+  - csi
+  - downwardAPI
+  - emptyDir
+  - ephemeral
+  - persistentVolumeClaim
+  - projected
+  - secret
+users: []
+groups: []

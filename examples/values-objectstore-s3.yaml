@@ -1,0 +1,45 @@
+# ===========================================================================
+# EXAMPLE: keep the binary filestore in S3 (or any S3-compatible store such
+# as OpenShift Data Foundation / NooBaa / MinIO) instead of the RWO volume.
+#
+# This is what makes artifactory.replicaCount > 1 possible, and it keeps the
+# PVC small (cache only).
+#
+# Add as an extra valueFile in gitops/applications/artifactory.yaml.
+#
+# Credentials: prefer an IAM role (useInstanceCredentials) or AWS STS web
+# identity on the ServiceAccount. If you must use static keys, create:
+#   oc -n artifactory create secret generic artifactory-s3 \
+#     --from-literal=access-key-id='...' --from-literal=secret-access-key='...'
+# ===========================================================================
+
+artifactory:
+  persistence:
+    # "-direct" providers stream to/from the bucket without a local staging
+    # copy, which is what you want on OpenShift with a small PVC.
+    type: s3-storage-v3-direct
+    # The PVC now only holds the cache + logs + config.
+    size: 50Gi
+    awsS3V3:
+      region: us-east-1
+      bucketName: my-artifactory-filestore
+      path: artifactory/filestore
+      # IRSA / instance profile (no static keys in the cluster):
+      useInstanceCredentials: true
+      # ... or static keys from a secret:
+      # useInstanceCredentials: false
+      # identitySecret:
+      #   name: artifactory-s3
+      #   key: access-key-id
+      # credentialSecret:
+      #   name: artifactory-s3
+      #   key: secret-access-key
+      #
+      # S3-compatible endpoints (ODF/NooBaa/MinIO) need these:
+      # endpoint: s3.openshift-storage.svc:443
+      # enablePathStyleAccess: true
+      testConnection: true
+      maxConnections: 50
+
+  # Only with object storage + an Enterprise license:
+  # replicaCount: 2
