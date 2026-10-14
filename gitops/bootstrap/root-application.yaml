@@ -18,7 +18,7 @@ metadata:
 spec:
   project: artifactory
   source:
-    repoURL: https://github.com/CHANGE-ME/artifactory-openshift-gitops.git
+    repoURL: https://github.com/sholly/artifactory-openshift-gitops.git
     targetRevision: main
     path: gitops/applications
     directory:

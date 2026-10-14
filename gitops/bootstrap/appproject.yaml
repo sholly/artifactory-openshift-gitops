@@ -17,7 +17,7 @@ spec:
 
   sourceRepos:
     # This repository (manifests + Helm values).
-    - https://github.com/CHANGE-ME/artifactory-openshift-gitops.git
+    - https://github.com/sholly/artifactory-openshift-gitops.git
     # Upstream JFrog Helm chart repository.
     - https://charts.jfrog.io
 

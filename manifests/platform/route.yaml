@@ -28,7 +28,7 @@ metadata:
     # Streaming uploads: don't let the router buffer whole artifacts.
     haproxy.router.openshift.io/disable_cookies: "true"
 spec:
-  # host: artifactory.apps.example.com
+  host: artifactory.apps.ocprod.303.tube
   to:
     kind: Service
     name: artifactory

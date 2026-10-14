@@ -101,7 +101,7 @@ artifactory:
   #   repository: jfrog/artifactory-oss
   image:
     registry: releases-docker.jfrog.io
-    repository: jfrog/artifactory-pro
+    repository: jfrog/artifactory-oss
     # Pin a digest for immutable deploys:
     # digest: sha256:...
 

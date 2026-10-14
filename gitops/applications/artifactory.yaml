@@ -40,7 +40,7 @@ spec:
         valueFiles:
           - sizing/artifactory-xsmall.yaml
           - $values/helm/values-openshift.yaml
-    - repoURL: https://github.com/CHANGE-ME/artifactory-openshift-gitops.git
+    - repoURL: https://github.com/sholly/artifactory-openshift-gitops.git
       targetRevision: main
       ref: values
   destination:
